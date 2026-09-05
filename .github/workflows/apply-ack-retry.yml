@@ -25,9 +25,6 @@ jobs:
           path = Path("index.html")
           text = path.read_text(encoding="utf-8")
 
-          if "function sendReliableCommand(command)" in text:
-              raise SystemExit("ACK patch already applied")
-
           old_config = '''      duplicateCooldown: 1800,\n\n      /*\n       * Maximum event history.\n       */'''
           new_config = '''      duplicateCooldown: 1800,\n\n      /*\n       * Delivery acknowledgement settings.\n       */\n      ackTimeout: 1400,\n      maxRetries: 3,\n\n      /*\n       * Maximum event history.\n       */'''
           if old_config not in text:
@@ -40,46 +37,34 @@ jobs:
               raise SystemExit("STATE anchor not found")
           text = text.replace(old_state, new_state, 1)
 
-          finalize = '''    function finalizeReceivedPacket() {\n\n      const packet = { ...receiverPacket };\n\n      resetReceiverPacket();\n\n      if (!packet.command) {\n        return;\n      }\n\n      if (packet.command === "ACK") {\n        state.packetCount++;\n        packetCountDisplay.textContent = String(state.packetCount);\n\n        if (state.pendingDelivery) {\n          state.ackReceived = true;\n          state.pendingDelivery = null;\n          txState.textContent = "DELIVERED ✓";\n          rxStateDisplay.textContent = "ACK RECEIVED";\n          createEvent({\n            command: "ACK", direction: "RX",\n            frequency: CONFIG.frequencies.ACK,\n            signalStrength: packet.strength, verified: true,\n            sequence: state.sequence\n          });\n          setTimeout(() => {\n            if (state.receiverRunning) rxStateDisplay.textContent = "LISTENING";\n          }, 1000);\n        }\n        return;\n      }\n\n      if (state.transmitting) return;\n\n      const now = Date.now();\n      if (now - state.lastPacketTime < CONFIG.duplicateCooldown) return;\n      state.lastPacketTime = now;\n      state.packetCount++;\n      packetCountDisplay.textContent = String(state.packetCount);\n\n      const valid =\n        packet.symbols.includes("SYNC") &&\n        packet.symbols.includes(packet.command) &&\n        packet.symbols.includes("END");\n      if (!valid) return;\n\n      createEvent({\n        command: packet.command, direction: "RX",\n        frequency: Math.round(packet.frequency || COMMANDS[packet.command]?.frequency || 0),\n        signalStrength: packet.strength, verified: true,\n        sequence: state.packetCount\n      });\n      rxStateDisplay.textContent = "PACKET VERIFIED";\n\n      setTimeout(() => {\n        if (state.audioReady && !state.transmitting) {\n          transmitPacket("ACK", { waitForAck: false });\n        }\n      }, 80);\n\n      setTimeout(() => {\n        if (state.receiverRunning) rxStateDisplay.textContent = "LISTENING";\n      }, 900);\n    }'''
+          finalize = '''    function finalizeReceivedPacket() {\n\n      const packet = { ...receiverPacket };\n\n      resetReceiverPacket();\n\n      if (!packet.command) return;\n\n      if (packet.command === "ACK") {\n        state.packetCount++;\n        packetCountDisplay.textContent = String(state.packetCount);\n        if (state.pendingDelivery) {\n          state.ackReceived = true;\n          state.pendingDelivery = null;\n          txState.textContent = "DELIVERED ✓";\n          rxStateDisplay.textContent = "ACK RECEIVED";\n          createEvent({\n            command: "ACK", direction: "RX",\n            frequency: CONFIG.frequencies.ACK,\n            signalStrength: packet.strength, verified: true,\n            sequence: state.sequence\n          });\n          setTimeout(() => {\n            if (state.receiverRunning) rxStateDisplay.textContent = "LISTENING";\n          }, 1000);\n        }\n        return;\n      }\n\n      if (state.transmitting) return;\n\n      const now = Date.now();\n      if (now - state.lastPacketTime < CONFIG.duplicateCooldown) return;\n      state.lastPacketTime = now;\n      state.packetCount++;\n      packetCountDisplay.textContent = String(state.packetCount);\n\n      const valid =\n        packet.symbols.includes("SYNC") &&\n        packet.symbols.includes(packet.command) &&\n        packet.symbols.includes("END");\n      if (!valid) return;\n\n      createEvent({\n        command: packet.command, direction: "RX",\n        frequency: Math.round(packet.frequency || COMMANDS[packet.command]?.frequency || 0),\n        signalStrength: packet.strength, verified: true,\n        sequence: state.packetCount\n      });\n      rxStateDisplay.textContent = "PACKET VERIFIED";\n\n      setTimeout(() => {\n        if (state.audioReady && !state.transmitting) {\n          transmitPacket("ACK", { waitForAck: false });\n        }\n      }, 80);\n\n      setTimeout(() => {\n        if (state.receiverRunning) rxStateDisplay.textContent = "LISTENING";\n      }, 900);\n    }'''
           text, count = re.subn(
               r'    function finalizeReceivedPacket\(\) \{.*?\n    \}\n\n\n    /\* ============================================================\n       16\. RECEIVER LOOP',
               finalize + '''\n\n\n    /* ============================================================\n       16. RECEIVER LOOP''',
-              text,
-              count=1,
-              flags=re.S)
-          if count != 1:
-              raise SystemExit("FINALIZE function replacement failed")
+              text, count=1, flags=re.S)
+          if count != 1: raise SystemExit("FINALIZE function replacement failed")
 
           transmit = '''    async function transmitPacket(command, options = {}) {\n\n      if (!state.audioReady) {\n        alert("Initialize the Audio Engine first.");\n        return false;\n      }\n      if (state.transmitting) return false;\n\n      const waitForAck = options.waitForAck !== false && command !== "ACK";\n      state.transmitting = true;\n      const packet = buildPacket(command);\n\n      if (command !== "ACK") {\n        state.lastCommand = command;\n        repeatButton.disabled = false;\n        lastTx.textContent = command;\n      }\n      txState.textContent = `TRANSMITTING ${command}`;\n\n      try {\n        const total = packet.symbols.length;\n        for (let i = 0; i < total; i++) {\n          const symbol = packet.symbols[i];\n          txState.textContent = `TX ${symbol}`;\n          txProgress.style.width = `${Math.round(i / total * 100)}%`;\n          await transmitSymbol(symbol);\n        }\n        txProgress.style.width = "100%";\n\n        if (command === "ACK") {\n          txState.textContent = "ACK SENT";\n          return true;\n        }\n\n        createEvent({\n          command, direction: "TX",\n          frequency: COMMANDS[command]?.frequency || 0,\n          signalStrength: null, verified: true,\n          sequence: state.sequence\n        });\n\n        if (waitForAck) {\n          state.ackReceived = false;\n          state.pendingDelivery = { command, sequence: state.sequence, attempt: options.attempt || 1 };\n          txState.textContent = `WAITING FOR ACK • ATTEMPT ${options.attempt || 1}`;\n          await sleep(CONFIG.ackTimeout);\n          if (state.ackReceived) return true;\n          state.pendingDelivery = null;\n          return false;\n        }\n        return true;\n      } catch (error) {\n        console.error("Transmission failed:", error);\n        txState.textContent = "TX ERROR";\n        return false;\n      } finally {\n        state.transmitting = false;\n        setTimeout(() => {\n          txProgress.style.width = "0%";\n          txTimer.textContent = "0.0s";\n          if (!state.transmitting && !state.pendingDelivery &&\n              (txState.textContent.startsWith("TX ") || txState.textContent.startsWith("TRANSMITTING "))) {\n            txState.textContent = "TRANSMITTER READY";\n          }\n        }, 900);\n      }\n    }'''
           text, count = re.subn(
               r'    async function transmitPacket\(\n      command\n    \) \{.*?\n    \}\n\n\n    /\* ============================================================\n       21\. COMMAND BUTTONS',
               transmit + '''\n\n\n    /* ============================================================\n       21. COMMAND BUTTONS''',
-              text,
-              count=1,
-              flags=re.S)
-          if count != 1:
-              raise SystemExit("TRANSMIT function replacement failed")
+              text, count=1, flags=re.S)
+          if count != 1: raise SystemExit("TRANSMIT function replacement failed")
 
           reliable_helper = '''    async function sendReliableCommand(command) {\n      for (let attempt = 1; attempt <= CONFIG.maxRetries; attempt++) {\n        if (attempt > 1) {\n          txState.textContent = `RETRY ${attempt}/${CONFIG.maxRetries}`;\n          await sleep(250);\n        }\n        const delivered = await transmitPacket(command, { attempt, waitForAck: true });\n        if (delivered) {\n          txState.textContent = "DELIVERED ✓";\n          return true;\n        }\n      }\n      state.pendingDelivery = null;\n      txState.textContent = "DELIVERY FAILED ⚠";\n      createEvent({\n        command, direction: "TX",\n        frequency: COMMANDS[command]?.frequency || 0,\n        signalStrength: null, verified: false, sequence: state.sequence\n      });\n      return false;\n    }'''
           buttons = '''    commandButtons.forEach(button => {\n      button.addEventListener("click", async () => {\n        const command = button.dataset.command;\n        if (command === "ACK") return;\n        await sendReliableCommand(command);\n      });\n    });'''
           text, count = re.subn(
               r'    commandButtons\.forEach\(.*?\n    \);\n\n\n    /\* ============================================================\n       22\. REPEAT',
               reliable_helper + "\n\n\n" + buttons + '''\n\n\n    /* ============================================================\n       22. REPEAT''',
-              text,
-              count=1,
-              flags=re.S)
-          if count != 1:
-              raise SystemExit("COMMAND BUTTON replacement failed")
+              text, count=1, flags=re.S)
+          if count != 1: raise SystemExit("COMMAND BUTTON replacement failed")
 
           repeat = '''    repeatButton.addEventListener("click", async () => {\n      if (state.lastCommand) {\n        await sendReliableCommand(state.lastCommand);\n      }\n    });'''
           text, count = re.subn(
               r'    repeatButton\.addEventListener\(.*?\n    \);\n\n\n    /\* ============================================================\n       23\. START SYSTEM',
               repeat + '''\n\n\n    /* ============================================================\n       23. START SYSTEM''',
-              text,
-              count=1,
-              flags=re.S)
-          if count != 1:
-              raise SystemExit("REPEAT handler replacement failed")
+              text, count=1, flags=re.S)
+          if count != 1: raise SystemExit("REPEAT handler replacement failed")
 
           path.write_text(text, encoding="utf-8")
 
@@ -89,8 +74,6 @@ jobs:
               "pendingDelivery: null",
               "ackReceived: false",
               "function sendReliableCommand(command)",
-              'transmitPacket("ACK"',
-              'waitForAck: false',
               'DELIVERED ✓'
           ]
           for marker in required:
