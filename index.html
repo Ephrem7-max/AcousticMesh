@@ -1005,7 +1005,10 @@
       <section class="column">
         <div class="column-header">
           <div class="column-title">LIVE INCIDENT FEED</div>
-          <div class="column-label" id="eventCount">0 EVENTS</div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div class="column-label" id="eventCount">0 EVENTS</div>
+            <button id="clearHistoryButton" class="secondary-button" type="button" style="width:auto;margin:0;padding:6px 8px;font-size:8px;">CLEAR LOCAL HISTORY</button>
+          </div>
         </div>
 
         <div id="feed" class="feed">
@@ -1322,6 +1325,7 @@
     const feed = $("#feed");
     const emptyFeed = $("#emptyFeed");
     const eventCount = $("#eventCount");
+    const clearHistoryButton = $("#clearHistoryButton");
 
     const mapCanvas = $("#mapCanvas");
 
@@ -1565,6 +1569,15 @@
       });
     }
 
+
+    clearHistoryButton.addEventListener("click", () => {
+      if (!state.events.length) return;
+      if (!confirm("Clear all locally stored incident history on this device?")) return;
+      state.events = [];
+      localStorage.removeItem(CONFIG.storageKey);
+      renderFeed();
+      drawMap();
+    });
 
     function renderFeed() {
 
