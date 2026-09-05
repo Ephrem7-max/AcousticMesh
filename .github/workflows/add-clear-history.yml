@@ -1,0 +1,59 @@
+name: Add Clear Local History
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add clear history control
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8')
+          original = s
+
+          old = '''          <div class="column-title">LIVE INCIDENT FEED</div>\n          <div class="column-label" id="eventCount">0 EVENTS</div>'''
+          new = '''          <div class="column-title">LIVE INCIDENT FEED</div>\n          <div style="display:flex;align-items:center;gap:8px;">\n            <div class="column-label" id="eventCount">0 EVENTS</div>\n            <button id="clearHistoryButton" class="secondary-button" type="button" style="width:auto;margin:0;padding:6px 8px;font-size:8px;">CLEAR LOCAL HISTORY</button>\n          </div>'''
+          if old not in s:
+              raise SystemExit('Feed header anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = '''    const feed = $("#feed");\n    const emptyFeed = $("#emptyFeed");\n    const eventCount = $("#eventCount");'''
+          new = '''    const feed = $("#feed");\n    const emptyFeed = $("#emptyFeed");\n    const eventCount = $("#eventCount");\n    const clearHistoryButton = $("#clearHistoryButton");'''
+          if old not in s:
+              raise SystemExit('DOM anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = '''    function renderFeed() {'''
+          new = '''    clearHistoryButton.addEventListener("click", () => {\n      if (!state.events.length) return;\n      if (!confirm("Clear all locally stored incident history on this device?")) return;\n      state.events = [];\n      localStorage.removeItem(CONFIG.storageKey);\n      renderFeed();\n      drawMap();\n    });\n\n    function renderFeed() {'''
+          if old not in s:
+              raise SystemExit('renderFeed anchor not found')
+          s = s.replace(old, new, 1)
+
+          if s == original:
+              raise SystemExit('No changes made')
+          p.write_text(s, encoding='utf-8')
+          print('Patched index.html')
+          PY
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git commit -m "feat: add clear local history control [skip ci]"
+          git push
+
+          git rm .github/workflows/add-clear-history.yml
+          git commit -m "chore: remove one-time history patch workflow [skip ci]"
+          git push
