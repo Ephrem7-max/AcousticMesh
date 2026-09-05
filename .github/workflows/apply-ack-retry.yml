@@ -1,0 +1,112 @@
+name: Apply Acoustic ACK Retry Patch
+
+on:
+  push:
+    branches:
+      - feat/acoustic-ack-retry
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Patch index.html
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+          import subprocess
+
+          path = Path("index.html")
+          text = path.read_text(encoding="utf-8")
+
+          old_config = '''      duplicateCooldown: 1800,\n\n      /*\n       * Maximum event history.\n       */'''
+          new_config = '''      duplicateCooldown: 1800,\n\n      /*\n       * Delivery acknowledgement settings.\n       */\n      ackTimeout: 1400,\n      maxRetries: 3,\n\n      /*\n       * Maximum event history.\n       */'''
+          if old_config not in text:
+              raise SystemExit("CONFIG anchor not found")
+          text = text.replace(old_config, new_config, 1)
+
+          old_state = '''      lastCommand: null,\n      lastPacketTime: 0,'''
+          new_state = '''      lastCommand: null,\n      lastPacketTime: 0,\n\n      /*\n       * Reliable delivery state.\n       */\n      pendingDelivery: null,\n      ackReceived: false,'''
+          if old_state not in text:
+              raise SystemExit("STATE anchor not found")
+          text = text.replace(old_state, new_state, 1)
+
+          finalize = '''    function finalizeReceivedPacket() {\n\n      const packet = { ...receiverPacket };\n\n      resetReceiverPacket();\n\n      if (!packet.command) {\n        return;\n      }\n\n      /*\n       * ACK packets confirm delivery and never trigger\n       * another ACK. They bypass normal duplicate suppression\n       * because the sender may be waiting on this exact reply.\n       */\n      if (packet.command === "ACK") {\n\n        state.packetCount++;\n\n        packetCountDisplay.textContent =\n          String(state.packetCount);\n\n        if (state.pendingDelivery) {\n\n          state.ackReceived = true;\n          state.pendingDelivery = null;\n\n          txState.textContent =\n            "DELIVERED ✓";\n\n          rxStateDisplay.textContent =\n            "ACK RECEIVED";\n\n          createEvent({\n            command: "ACK",\n            direction: "RX",\n            frequency: CONFIG.frequencies.ACK,\n            signalStrength: packet.strength,\n            verified: true,\n            sequence: state.sequence\n          });\n\n          setTimeout(() => {\n            if (state.receiverRunning) {\n              rxStateDisplay.textContent =\n                "LISTENING";\n            }\n          }, 1000);\n        }\n\n        return;\n      }\n\n      /*\n       * Ignore normal packets while this device is transmitting.\n       * This prevents the local microphone from decoding its own\n       * speaker output as a second emergency packet.\n       */\n      if (state.transmitting) {\n        return;\n      }\n\n      const now = Date.now();\n\n      if (\n        now -\n        state.lastPacketTime <\n        CONFIG.duplicateCooldown\n      ) {\n        return;\n      }\n\n      state.lastPacketTime = now;\n\n      state.packetCount++;\n\n      packetCountDisplay.textContent =\n        String(state.packetCount);\n\n      /*\n       * A valid command packet must contain SYNC, the command,\n       * and END.\n       */\n      const valid =\n        packet.symbols.includes("SYNC") &&\n        packet.symbols.includes(packet.command) &&\n        packet.symbols.includes("END");\n\n      if (!valid) {\n        return;\n      }\n\n      createEvent({\n        command: packet.command,\n        direction: "RX",\n        frequency:\n          Math.round(\n            packet.frequency ||\n            COMMANDS[packet.command]?.frequency ||\n            0\n          ),\n        signalStrength: packet.strength,\n        verified: true,\n        sequence: state.packetCount\n      });\n\n      rxStateDisplay.textContent =\n        "PACKET VERIFIED";\n\n      /*\n       * Immediately acknowledge a valid command packet.\n       */\n      setTimeout(() => {\n        if (state.audioReady && !state.transmitting) {\n          transmitPacket("ACK", { waitForAck: false });\n        }\n      }, 80);\n\n      setTimeout(() => {\n        if (state.receiverRunning) {\n          rxStateDisplay.textContent =\n            "LISTENING";\n        }\n      }, 900);\n    }'''
+          text, count = re.subn(
+              r'    function finalizeReceivedPacket\(\) \{.*?\n    \}\n\n\n    /\* ============================================================\n       16\. RECEIVER LOOP',
+              finalize + '''\n\n\n    /* ============================================================\n       16. RECEIVER LOOP''',
+              text,
+              count=1,
+              flags=re.S,
+          )
+          if count != 1:
+              raise SystemExit("FINALIZE function replacement failed")
+
+          transmit = '''    async function transmitPacket(\n      command,\n      options = {}\n    ) {\n\n      if (!state.audioReady) {\n        alert(\n          "Initialize the Audio Engine first."\n        );\n        return false;\n      }\n\n      if (state.transmitting) {\n        return false;\n      }\n\n      const waitForAck =\n        options.waitForAck !== false &&\n        command !== "ACK";\n\n      state.transmitting = true;\n\n      const packet =\n        buildPacket(command);\n\n      if (command !== "ACK") {\n        state.lastCommand = command;\n        repeatButton.disabled = false;\n        lastTx.textContent = command;\n      }\n\n      txState.textContent =\n        `TRANSMITTING ${command}`;\n\n      try {\n        const total = packet.symbols.length;\n\n        for (\n          let i = 0;\n          i < total;\n          i++\n        ) {\n          const symbol = packet.symbols[i];\n\n          txState.textContent =\n            `TX ${symbol}`;\n\n          const percent =\n            Math.round(i / total * 100);\n\n          txProgress.style.width =\n            `${percent}%`;\n\n          await transmitSymbol(symbol);\n        }\n\n        txProgress.style.width = "100%";\n\n        if (command === "ACK") {\n          txState.textContent = "ACK SENT";\n          return true;\n        }\n\n        createEvent({\n          command,\n          direction: "TX",\n          frequency:\n            COMMANDS[command]?.frequency || 0,\n          signalStrength: null,\n          verified: true,\n          sequence: state.sequence\n        });\n\n        if (waitForAck) {\n          state.ackReceived = false;\n\n          state.pendingDelivery = {\n            command,\n            sequence: state.sequence,\n            attempt: options.attempt || 1\n          };\n\n          txState.textContent =\n            `WAITING FOR ACK • ATTEMPT ${\n              options.attempt || 1\n            }`;\n\n          await sleep(CONFIG.ackTimeout);\n\n          if (state.ackReceived) {\n            return true;\n          }\n\n          state.pendingDelivery = null;\n          return false;\n        }\n\n        return true;\n\n      } catch (error) {\n        console.error(\n          "Transmission failed:",\n          error\n        );\n\n        txState.textContent = "TX ERROR";\n        return false;\n\n      } finally {\n        state.transmitting = false;\n\n        setTimeout(() => {\n          txProgress.style.width = "0%";\n          txTimer.textContent = "0.0s";\n\n          if (!state.transmitting) {\n            if (state.pendingDelivery) {\n              txState.textContent = "WAITING FOR ACK";\n            } else if (\n              txState.textContent.startsWith("TX ") ||\n              txState.textContent.startsWith("TRANSMITTING ")\n            ) {\n              txState.textContent = "TRANSMITTER READY";\n            }\n          }\n        }, 900);\n      }\n    }'''
+          text, count = re.subn(
+              r'    async function transmitPacket\(\n      command\n    \) \{.*?\n    \}\n\n\n    /\* ============================================================\n       21\. COMMAND BUTTONS',
+              transmit + '''\n\n\n    /* ============================================================\n       21. COMMAND BUTTONS''',
+              text,
+              count=1,
+              flags=re.S,
+          )
+          if count != 1:
+              raise SystemExit("TRANSMIT function replacement failed")
+
+          reliable_helper = '''    async function sendReliableCommand(command) {\n\n      for (\n        let attempt = 1;\n        attempt <= CONFIG.maxRetries;\n        attempt++\n      ) {\n\n        if (attempt > 1) {\n          txState.textContent =\n            `RETRY ${attempt}/${CONFIG.maxRetries}`;\n          await sleep(250);\n        }\n\n        const delivered =\n          await transmitPacket(command, {\n            attempt,\n            waitForAck: true\n          });\n\n        if (delivered) {\n          txState.textContent =\n            "DELIVERED ✓";\n          return true;\n        }\n      }\n\n      state.pendingDelivery = null;\n      txState.textContent =\n        "DELIVERY FAILED ⚠";\n\n      createEvent({\n        command,\n        direction: "TX",\n        frequency:\n          COMMANDS[command]?.frequency || 0,\n        signalStrength: null,\n        verified: false,\n        sequence: state.sequence\n      });\n\n      return false;\n    }'''
+          buttons = '''    commandButtons.forEach(\n      button => {\n        button.addEventListener(\n          "click",\n          async () => {\n            const command =\n              button.dataset.command;\n\n            if (command === "ACK") {\n              return;\n            }\n\n            await sendReliableCommand(command);\n          }\n        );\n      }\n    );'''
+          text, count = re.subn(
+              r'    commandButtons\.forEach\(.*?\n    \);\n\n\n    /\* ============================================================\n       22\. REPEAT',
+              reliable_helper + "\n\n\n" + buttons + '''\n\n\n    /* ============================================================\n       22. REPEAT''',
+              text,
+              count=1,
+              flags=re.S,
+          )
+          if count != 1:
+              raise SystemExit("COMMAND BUTTON replacement failed")
+
+          repeat = '''    repeatButton.addEventListener(\n      "click",\n      async () => {\n        if (state.lastCommand) {\n          await sendReliableCommand(\n            state.lastCommand\n          );\n        }\n      }\n    );'''
+          text, count = re.subn(
+              r'    repeatButton\.addEventListener\(.*?\n    \);\n\n\n    /\* ============================================================\n       23\. START SYSTEM',
+              repeat + '''\n\n\n    /* ============================================================\n       23. START SYSTEM''',
+              text,
+              count=1,
+              flags=re.S,
+          )
+          if count != 1:
+              raise SystemExit("REPEAT handler replacement failed")
+
+          path.write_text(text, encoding="utf-8")
+
+          # Basic structural checks before committing.
+          required = [
+              "ackTimeout: 1400",
+              "maxRetries: 3",
+              "pendingDelivery: null",
+              "ackReceived: false",
+              "function sendReliableCommand(command)",
+              'transmitPacket("ACK", { waitForAck: false })',
+              'txState.textContent =\n            "DELIVERED ✓"',
+          ]
+          for marker in required:
+              if marker not in text:
+                  raise SystemExit(f"Validation marker missing: {marker}")
+
+          subprocess.run(["git", "config", "user.name", "github-actions[bot]"], check=True)
+          subprocess.run(["git", "config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com"], check=True)
+          subprocess.run(["git", "add", "index.html"], check=True)
+          subprocess.run(["git", "commit", "-m", "feat: add acoustic ACK and automatic retry"], check=True)
+          subprocess.run(["git", "push"], check=True)
+
+      - name: Remove patch workflow
+        shell: bash
+        run: |
+          git rm .github/workflows/apply-ack-retry.yml
+          git commit -m "chore: remove one-time ACK retry patcher"
+          git push
