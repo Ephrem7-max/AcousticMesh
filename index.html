@@ -1240,6 +1240,10 @@
        */
       duplicateCooldown: 1800,
 
+      /* Delivery acknowledgement settings. */
+      ackTimeout: 1400,
+      maxRetries: 3,
+
       /*
        * Maximum event history.
        */
@@ -1356,6 +1360,9 @@
 
       lastCommand: null,
       lastPacketTime: 0,
+
+      pendingDelivery: null,
+      ackReceived: false,
 
       detector: {
         candidate: null,
@@ -2265,57 +2272,47 @@
 
       resetReceiverPacket();
 
-
       if (!packet.command) {
         return;
       }
 
-
-      /*
-       * Duplicate suppression.
-       *
-       * The physical microphone can hear the same
-       * acoustic packet over multiple frames.
-       */
-      const now = Date.now();
-
-      if (
-        now -
-        state.lastPacketTime <
-        CONFIG.duplicateCooldown
-      ) {
+      if (packet.command === "ACK") {
+        state.ackReceived = true;
+        state.pendingDelivery = null;
+        txState.textContent = "DELIVERED ✓";
+        rxStateDisplay.textContent = "ACK RECEIVED";
+        createEvent({
+          command: "ACK",
+          direction: "RX",
+          frequency: CONFIG.frequencies.ACK,
+          signalStrength: packet.strength,
+          verified: true,
+          sequence: state.sequence
+        });
         return;
       }
 
+      if (state.transmitting) {
+        return;
+      }
+
+      const now = Date.now();
+      if (now - state.lastPacketTime < CONFIG.duplicateCooldown) {
+        return;
+      }
       state.lastPacketTime = now;
 
-
       state.packetCount++;
-
       packetCountDisplay.textContent =
         String(state.packetCount);
 
-
-      /*
-       * A valid packet has:
-       *
-       * SYNC
-       * COMMAND
-       * END
-       *
-       * ACK may terminate immediately.
-       */
       const valid =
         packet.symbols.includes("SYNC") &&
-        packet.symbols.includes(
-          packet.command
-        );
-
+        packet.symbols.includes(packet.command);
 
       if (!valid) {
         return;
       }
-
 
       createEvent({
         command: packet.command,
@@ -2326,27 +2323,24 @@
             COMMANDS[packet.command]?.frequency ||
             0
           ),
-        signalStrength:
-          packet.strength,
+        signalStrength: packet.strength,
         verified: true,
         sequence: state.packetCount
       });
 
-
-      /*
-       * Update receiver telemetry.
-       */
       rxStateDisplay.textContent =
         "PACKET VERIFIED";
 
+      setTimeout(() => {
+        if (state.audioReady && !state.transmitting) {
+          transmitPacket("ACK", { waitForAck: false });
+        }
+      }, 80);
 
       setTimeout(() => {
-
         if (state.receiverRunning) {
-          rxStateDisplay.textContent =
-            "LISTENING";
+          rxStateDisplay.textContent = "LISTENING";
         }
-
       }, 900);
     }
 
@@ -2582,63 +2576,53 @@
        ============================================================ */
 
     async function transmitPacket(
-      command
+      command,
+      options = {}
     ) {
 
       if (!state.audioReady) {
         alert(
           "Initialize the Audio Engine first."
         );
-
-        return;
+        return false;
       }
-
 
       if (state.transmitting) {
-        return;
+        return false;
       }
 
+      const waitForAck =
+        options.waitForAck !== false &&
+        command !== "ACK";
 
       state.transmitting = true;
-
 
       const packet =
         buildPacket(command);
 
-
-      state.lastCommand =
-        command;
-
-
-      repeatButton.disabled = false;
-
-      lastTx.textContent =
-        command;
-
+      if (command !== "ACK") {
+        state.lastCommand = command;
+        repeatButton.disabled = false;
+        lastTx.textContent = command;
+      }
 
       txState.textContent =
         `TRANSMITTING ${command}`;
 
-
       try {
-
         const total =
           packet.symbols.length;
-
 
         for (
           let i = 0;
           i < total;
           i++
         ) {
-
           const symbol =
             packet.symbols[i];
 
-
           txState.textContent =
             `TX ${symbol}`;
-
 
           const percent =
             Math.round(
@@ -2648,24 +2632,20 @@
           txProgress.style.width =
             `${percent}%`;
 
-
           await transmitSymbol(
             symbol
           );
         }
 
-
         txProgress.style.width =
           "100%";
 
+        if (command === "ACK") {
+          txState.textContent =
+            "ACK SENT";
+          return true;
+        }
 
-        txState.textContent =
-          "PACKET SENT";
-
-
-        /*
-         * Record local transmission immediately.
-         */
         createEvent({
           command,
           direction: "TX",
@@ -2677,17 +2657,34 @@
           sequence: state.sequence
         });
 
+        if (waitForAck) {
+          state.ackReceived = false;
+          state.pendingDelivery = {
+            command,
+            sequence: state.sequence,
+            attempt: options.attempt || 1
+          };
 
-        /*
-         * Optional local acknowledgement simulation
-         * is deliberately NOT used.
-         *
-         * The demo should distinguish a sent packet from
-         * a packet actually heard by another device.
-         */
+          txState.textContent =
+            `WAITING FOR ACK • ATTEMPT ${
+              options.attempt || 1
+            }`;
+
+          await sleep(
+            CONFIG.ackTimeout
+          );
+
+          if (state.ackReceived) {
+            return true;
+          }
+
+          state.pendingDelivery = null;
+          return false;
+        }
+
+        return true;
 
       } catch (error) {
-
         console.error(
           "Transmission failed:",
           error
@@ -2696,24 +2693,25 @@
         txState.textContent =
           "TX ERROR";
 
-      } finally {
+        return false;
 
+      } finally {
         state.transmitting = false;
 
-
         setTimeout(() => {
-
           txProgress.style.width =
             "0%";
 
           txTimer.textContent =
             "0.0s";
 
-          if (!state.transmitting) {
+          if (
+            !state.transmitting &&
+            !state.pendingDelivery
+          ) {
             txState.textContent =
               "TRANSMITTER READY";
           }
-
         }, 900);
       }
     }
@@ -2723,17 +2721,67 @@
        21. COMMAND BUTTONS
        ============================================================ */
 
+    async function sendReliableCommand(command) {
+
+      for (
+        let attempt = 1;
+        attempt <= CONFIG.maxRetries;
+        attempt++
+      ) {
+        if (attempt > 1) {
+          txState.textContent =
+            `RETRY ${attempt}/${CONFIG.maxRetries}`;
+          await sleep(250);
+        }
+
+        const delivered =
+          await transmitPacket(command, {
+            attempt,
+            waitForAck: true
+          });
+
+        if (delivered) {
+          txState.textContent =
+            "DELIVERED ✓";
+          return true;
+        }
+      }
+
+      txState.textContent =
+        "DELIVERY FAILED ⚠";
+
+      createEvent({
+        command,
+        direction: "TX",
+        frequency:
+          COMMANDS[command]?.frequency ||
+          0,
+        signalStrength: null,
+        verified: false,
+        sequence: state.sequence
+      });
+
+      return false;
+    }
+
+
     commandButtons.forEach(
       button => {
 
         button.addEventListener(
           "click",
-          () => {
+          async () => {
 
             const command =
               button.dataset.command;
 
-            transmitPacket(command);
+            if (command === "ACK") {
+              return;
+            }
+
+            await sendReliableCommand(
+              command
+            );
           }
         );
       }
@@ -2746,10 +2794,9 @@
 
     repeatButton.addEventListener(
       "click",
-      () => {
-
+      async () => {
         if (state.lastCommand) {
-          transmitPacket(
+          await sendReliableCommand(
             state.lastCommand
           );
         }
