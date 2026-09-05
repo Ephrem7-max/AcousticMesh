@@ -1,0 +1,3338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+  />
+  <meta
+    name="description"
+    content="AcousticMesh — offline acoustic emergency signaling dashboard."
+  />
+  <meta name="theme-color" content="#05070a" />
+
+  <title>AcousticMesh — Offline Crisis Command</title>
+
+  <style>
+    /* ============================================================
+       ACOUSTICMESH
+       Self-contained offline UI
+       No external CSS or JavaScript dependencies.
+       ============================================================ */
+
+    :root {
+      --bg: #05070a;
+      --panel: #0a0e13;
+      --panel-2: #0d131a;
+      --panel-3: #111923;
+      --border: #26313d;
+      --border-bright: #394957;
+      --text: #e8edf2;
+      --muted: #8795a3;
+      --dim: #566371;
+
+      --red: #ff4757;
+      --red-soft: rgba(255, 71, 87, 0.12);
+
+      --blue: #3da5ff;
+      --blue-soft: rgba(61, 165, 255, 0.12);
+
+      --green: #42e695;
+      --green-soft: rgba(66, 230, 149, 0.12);
+
+      --yellow: #ffc857;
+      --yellow-soft: rgba(255, 200, 87, 0.12);
+
+      --purple: #b388ff;
+      --purple-soft: rgba(179, 136, 255, 0.12);
+
+      --radius: 10px;
+      --mono: "SFMono-Regular", Consolas, "Liberation Mono",
+        Menlo, monospace;
+      --sans: Inter, ui-sans-serif, system-ui, -apple-system,
+        BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      min-height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+    }
+
+    body {
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    button {
+      font: inherit;
+    }
+
+    button:focus-visible {
+      outline: 2px solid var(--blue);
+      outline-offset: 2px;
+    }
+
+    .app {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ============================================================
+       HEADER
+       ============================================================ */
+
+    header {
+      min-height: 68px;
+      border-bottom: 1px solid var(--border);
+      background: #070a0e;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 18px;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 20;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .brand-mark {
+      width: 38px;
+      height: 38px;
+      border: 1px solid var(--border-bright);
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      background: #0d1218;
+      font-size: 20px;
+    }
+
+    .brand-title {
+      font-family: var(--mono);
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      font-size: 15px;
+    }
+
+    .brand-subtitle {
+      color: var(--muted);
+      font-size: 11px;
+      margin-top: 2px;
+      font-family: var(--mono);
+    }
+
+    .header-status {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .status-pill {
+      border: 1px solid var(--border);
+      background: var(--panel);
+      border-radius: 999px;
+      padding: 7px 11px;
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .status-pill strong {
+      color: var(--text);
+    }
+
+    .online-dot {
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--dim);
+      margin-right: 6px;
+    }
+
+    .online-dot.ready {
+      background: var(--green);
+      box-shadow: 0 0 9px rgba(66, 230, 149, 0.7);
+    }
+
+    .online-dot.error {
+      background: var(--red);
+    }
+
+    /* ============================================================
+       SYSTEM BAR
+       ============================================================ */
+
+    .system-bar {
+      border-bottom: 1px solid var(--border);
+      background: #080c11;
+      padding: 9px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--muted);
+    }
+
+    .system-bar-left,
+    .system-bar-right {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .system-item span {
+      color: var(--text);
+    }
+
+    .offline-label {
+      color: var(--green);
+      font-weight: 800;
+      letter-spacing: 0.08em;
+    }
+
+    /* ============================================================
+       MAIN LAYOUT
+       ============================================================ */
+
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 290px minmax(360px, 1fr) minmax(360px, 1.15fr);
+      min-height: 0;
+    }
+
+    .column {
+      min-width: 0;
+      border-right: 1px solid var(--border);
+      background: var(--panel);
+    }
+
+    .column:last-child {
+      border-right: none;
+    }
+
+    .column-header {
+      padding: 13px 15px;
+      border-bottom: 1px solid var(--border);
+      background: #090d12;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .column-title {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+    }
+
+    .column-label {
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 9px;
+    }
+
+    .column-body {
+      padding: 14px;
+    }
+
+    /* ============================================================
+       COMMAND PANEL
+       ============================================================ */
+
+    .boot-panel {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--panel-2);
+      padding: 14px;
+      margin-bottom: 14px;
+    }
+
+    .boot-title {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+
+    .boot-description {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.5;
+      margin-bottom: 12px;
+    }
+
+    .primary-button,
+    .command-button,
+    .secondary-button {
+      width: 100%;
+      border: 1px solid var(--border-bright);
+      border-radius: 8px;
+      background: var(--panel-3);
+      color: var(--text);
+      cursor: pointer;
+      transition:
+        transform 0.12s ease,
+        border-color 0.12s ease,
+        background 0.12s ease;
+    }
+
+    .primary-button {
+      padding: 11px 13px;
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 800;
+      background: #13202a;
+    }
+
+    .primary-button:hover,
+    .secondary-button:hover {
+      border-color: var(--blue);
+      background: #12202c;
+    }
+
+    .primary-button:active,
+    .command-button:active,
+    .secondary-button:active {
+      transform: scale(0.985);
+    }
+
+    .primary-button.started {
+      border-color: var(--green);
+      color: var(--green);
+    }
+
+    .command-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 9px;
+    }
+
+    .command-button {
+      min-height: 105px;
+      padding: 12px;
+      text-align: left;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .command-button:hover {
+      border-color: var(--border-bright);
+      background: #151d26;
+    }
+
+    .command-button.disabled {
+      opacity: 0.38;
+      cursor: not-allowed;
+    }
+
+    .command-icon {
+      font-size: 22px;
+      display: block;
+      margin-bottom: 9px;
+    }
+
+    .command-name {
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 800;
+      display: block;
+    }
+
+    .command-frequency {
+      color: var(--dim);
+      font-family: var(--mono);
+      font-size: 8px;
+      display: block;
+      margin-top: 4px;
+    }
+
+    .command-sos {
+      border-color: rgba(255, 71, 87, 0.45);
+      background: var(--red-soft);
+    }
+
+    .command-resource {
+      border-color: rgba(61, 165, 255, 0.45);
+      background: var(--blue-soft);
+    }
+
+    .command-safe {
+      border-color: rgba(66, 230, 149, 0.45);
+      background: var(--green-soft);
+    }
+
+    .command-broadcast {
+      border-color: rgba(255, 200, 87, 0.45);
+      background: var(--yellow-soft);
+    }
+
+    .transmission-box {
+      margin-top: 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--panel-2);
+      padding: 12px;
+    }
+
+    .progress-track {
+      height: 5px;
+      border-radius: 999px;
+      background: #05070a;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+
+    .progress-bar {
+      width: 0%;
+      height: 100%;
+      background: var(--blue);
+      transition: width 0.05s linear;
+    }
+
+    .tx-meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--muted);
+    }
+
+    .secondary-button {
+      margin-top: 10px;
+      padding: 9px 11px;
+      font-family: var(--mono);
+      font-size: 9px;
+    }
+
+    /* ============================================================
+       FEED
+       ============================================================ */
+
+    .feed {
+      max-height: calc(100vh - 155px);
+      overflow-y: auto;
+      padding: 10px;
+    }
+
+    .feed::-webkit-scrollbar {
+      width: 5px;
+    }
+
+    .feed::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 999px;
+    }
+
+    .empty-feed {
+      border: 1px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 30px 18px;
+      text-align: center;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 10px;
+      line-height: 1.7;
+      margin: 5px;
+    }
+
+    .event-card {
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--border-bright);
+      background: var(--panel-2);
+      border-radius: 7px;
+      padding: 10px;
+      margin-bottom: 8px;
+      animation: eventIn 0.22s ease;
+    }
+
+    @keyframes eventIn {
+      from {
+        opacity: 0;
+        transform: translateY(-5px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .event-card.sos {
+      border-left-color: var(--red);
+    }
+
+    .event-card.resource {
+      border-left-color: var(--blue);
+    }
+
+    .event-card.safe {
+      border-left-color: var(--green);
+    }
+
+    .event-card.broadcast {
+      border-left-color: var(--yellow);
+    }
+
+    .event-card.ack {
+      border-left-color: var(--purple);
+    }
+
+    .event-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .event-command {
+      font-family: var(--mono);
+      font-weight: 800;
+      font-size: 10px;
+    }
+
+    .event-time {
+      color: var(--dim);
+      font-family: var(--mono);
+      font-size: 8px;
+    }
+
+    .event-details {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 9px;
+    }
+
+    .event-detail {
+      min-width: 0;
+    }
+
+    .detail-label {
+      display: block;
+      color: var(--dim);
+      text-transform: uppercase;
+      font-family: var(--mono);
+      font-size: 7px;
+      margin-bottom: 3px;
+    }
+
+    .detail-value {
+      display: block;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 8px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .verified {
+      color: var(--green);
+    }
+
+    .local {
+      color: var(--blue);
+    }
+
+    /* ============================================================
+       MAP
+       ============================================================ */
+
+    .map-wrap {
+      padding: 14px;
+    }
+
+    .map-container {
+      border: 1px solid var(--border);
+      background: #070b0f;
+      border-radius: var(--radius);
+      overflow: hidden;
+      position: relative;
+      min-height: 420px;
+    }
+
+    #mapCanvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      min-height: 420px;
+    }
+
+    .map-overlay {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      right: 10px;
+      display: flex;
+      justify-content: space-between;
+      pointer-events: none;
+    }
+
+    .map-badge {
+      border: 1px solid var(--border);
+      background: rgba(5, 7, 10, 0.88);
+      padding: 7px 9px;
+      border-radius: 6px;
+      font-family: var(--mono);
+      font-size: 8px;
+      color: var(--muted);
+    }
+
+    .map-legend {
+      margin-top: 10px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 7px;
+    }
+
+    .legend-item {
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      padding: 7px;
+      border-radius: 6px;
+      font-family: var(--mono);
+      font-size: 7px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .legend-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 4px;
+    }
+
+    /* ============================================================
+       TELEMETRY
+       ============================================================ */
+
+    .telemetry {
+      margin-top: 12px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 7px;
+    }
+
+    .telemetry-item {
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      border-radius: 6px;
+      padding: 8px;
+    }
+
+    .telemetry-label {
+      display: block;
+      font-family: var(--mono);
+      font-size: 7px;
+      color: var(--dim);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    .telemetry-value {
+      display: block;
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--text);
+    }
+
+    /* ============================================================
+       RADAR
+       ============================================================ */
+
+    .radar {
+      margin-top: 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--panel-2);
+      padding: 12px;
+    }
+
+    .radar-header {
+      display: flex;
+      justify-content: space-between;
+      font-family: var(--mono);
+      font-size: 8px;
+      color: var(--muted);
+    }
+
+    .radar-display {
+      height: 95px;
+      margin-top: 9px;
+      border: 1px solid #1c2731;
+      background:
+        linear-gradient(rgba(61, 165, 255, 0.06) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(61, 165, 255, 0.06) 1px, transparent 1px);
+      background-size: 19px 19px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .radar-sweep {
+      position: absolute;
+      width: 50%;
+      height: 1px;
+      background: rgba(61, 165, 255, 0.7);
+      top: 50%;
+      left: 50%;
+      transform-origin: left center;
+      animation: sweep 2.5s linear infinite;
+    }
+
+    @keyframes sweep {
+      from {
+        transform: rotate(0deg);
+      }
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .radar-center {
+      position: absolute;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      left: calc(50% - 3px);
+      top: calc(50% - 3px);
+    }
+
+    /* ============================================================
+       FOOTER
+       ============================================================ */
+
+    footer {
+      border-top: 1px solid var(--border);
+      background: #070a0e;
+      padding: 7px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--dim);
+      font-family: var(--mono);
+      font-size: 8px;
+    }
+
+    .footer-accent {
+      color: var(--green);
+    }
+
+    /* ============================================================
+       RESPONSIVE
+       ============================================================ */
+
+    @media (max-width: 1100px) {
+      main {
+        grid-template-columns: 250px minmax(320px, 1fr);
+      }
+
+      .map-column {
+        grid-column: 1 / -1;
+        border-top: 1px solid var(--border);
+        border-right: none;
+      }
+
+      .map-container {
+        min-height: 350px;
+      }
+
+      #mapCanvas {
+        min-height: 350px;
+      }
+    }
+
+    @media (max-width: 760px) {
+      header {
+        align-items: flex-start;
+      }
+
+      .header-status {
+        display: none;
+      }
+
+      .system-bar {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      main {
+        display: block;
+      }
+
+      .column {
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .feed {
+        max-height: 500px;
+      }
+
+      .command-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .map-container,
+      #mapCanvas {
+        min-height: 300px;
+      }
+
+      .map-legend {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app">
+
+    <!-- ==========================================================
+         HEADER
+         ========================================================== -->
+
+    <header>
+      <div class="brand">
+        <div class="brand-mark">⌁</div>
+
+        <div>
+          <div class="brand-title">ACOUSTICMESH</div>
+          <div class="brand-subtitle">
+            OFFLINE CRISIS COMMAND DASHBOARD
+          </div>
+        </div>
+      </div>
+
+      <div class="header-status">
+        <div class="status-pill">
+          <span id="systemDot" class="online-dot"></span>
+          SYSTEM <strong id="systemStatus">STANDBY</strong>
+        </div>
+
+        <div class="status-pill">
+          NODE <strong id="nodeIdDisplay">----</strong>
+        </div>
+
+        <div class="status-pill">
+          <strong id="clock">--:--:--</strong>
+        </div>
+      </div>
+    </header>
+
+    <!-- ==========================================================
+         OFFLINE STATUS BAR
+         ========================================================== -->
+
+    <div class="system-bar">
+      <div class="system-bar-left">
+        <div class="offline-label">● OFFLINE / SOVEREIGN</div>
+
+        <div class="system-item">
+          NETWORK <span>NONE</span>
+        </div>
+
+        <div class="system-item">
+          CLOUD <span>NONE</span>
+        </div>
+
+        <div class="system-item">
+          CELLULAR <span>NONE</span>
+        </div>
+      </div>
+
+      <div class="system-bar-right">
+        <div class="system-item">
+          AUDIO <span id="audioState">NOT INITIALIZED</span>
+        </div>
+
+        <div class="system-item">
+          STORAGE <span>LOCAL</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==========================================================
+         MAIN THREE-COLUMN DASHBOARD
+         ========================================================== -->
+
+    <main>
+
+      <!-- ========================================================
+           LEFT: COMMANDS
+           ======================================================== -->
+
+      <section class="column command-column">
+        <div class="column-header">
+          <div class="column-title">TRANSMISSION</div>
+          <div class="column-label">TX CONTROL</div>
+        </div>
+
+        <div class="column-body">
+
+          <div class="boot-panel">
+            <div class="boot-title">AUDIO ENGINE</div>
+
+            <div class="boot-description">
+              Start the local audio engine to enable microphone reception
+              and acoustic transmission.
+            </div>
+
+            <button id="startButton" class="primary-button">
+              INITIALIZE SYSTEM
+            </button>
+          </div>
+
+          <div class="command-grid">
+
+            <button
+              class="command-button command-sos"
+              data-command="SOS"
+              disabled
+            >
+              <span class="command-icon">🚨</span>
+              <span class="command-name">SOS</span>
+              <span class="command-frequency">18.000 kHz</span>
+            </button>
+
+            <button
+              class="command-button command-resource"
+              data-command="RESOURCE"
+              disabled
+            >
+              <span class="command-icon">💧</span>
+              <span class="command-name">RESOURCE</span>
+              <span class="command-frequency">18.500 kHz</span>
+            </button>
+
+            <button
+              class="command-button command-safe"
+              data-command="SAFE"
+              disabled
+            >
+              <span class="command-icon">💚</span>
+              <span class="command-name">SAFE</span>
+              <span class="command-frequency">19.000 kHz</span>
+            </button>
+
+            <button
+              class="command-button command-broadcast"
+              data-command="BROADCAST"
+              disabled
+            >
+              <span class="command-icon">📢</span>
+              <span class="command-name">BROADCAST</span>
+              <span class="command-frequency">19.500 kHz</span>
+            </button>
+
+          </div>
+
+          <div class="transmission-box">
+
+            <div class="tx-meta">
+              <span>LAST TX</span>
+              <span id="lastTx">NONE</span>
+            </div>
+
+            <div class="progress-track">
+              <div id="txProgress" class="progress-bar"></div>
+            </div>
+
+            <div class="tx-meta" style="margin-top: 7px;">
+              <span id="txState">TRANSMITTER READY</span>
+              <span id="txTimer">0.0s</span>
+            </div>
+
+            <button
+              id="repeatButton"
+              class="secondary-button"
+              disabled
+            >
+              ↻ REPEAT LAST PACKET
+            </button>
+
+          </div>
+
+          <div class="radar">
+            <div class="radar-header">
+              <span>ACOUSTIC RADAR</span>
+              <span id="radarStatus">STANDBY</span>
+            </div>
+
+            <div class="radar-display">
+              <div class="radar-sweep"></div>
+              <div class="radar-center"></div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ========================================================
+           CENTER: EVENT FEED
+           ======================================================== -->
+
+      <section class="column">
+        <div class="column-header">
+          <div class="column-title">LIVE INCIDENT FEED</div>
+          <div class="column-label" id="eventCount">0 EVENTS</div>
+        </div>
+
+        <div id="feed" class="feed">
+          <div id="emptyFeed" class="empty-feed">
+            NO INCIDENTS RECORDED.<br /><br />
+            INITIALIZE AUDIO ENGINE<br />
+            TO BEGIN RECEIVING SIGNALS.
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================================================
+           RIGHT: OFFLINE MAP
+           ======================================================== -->
+
+      <section class="column map-column">
+        <div class="column-header">
+          <div class="column-title">LOCAL INCIDENT MAP</div>
+          <div class="column-label">NO NETWORK MAP DATA</div>
+        </div>
+
+        <div class="map-wrap">
+
+          <div class="map-container">
+
+            <canvas id="mapCanvas"></canvas>
+
+            <div class="map-overlay">
+              <div class="map-badge">
+                LOCAL TACTICAL GRID
+              </div>
+
+              <div class="map-badge">
+                NORTH ↑
+              </div>
+            </div>
+
+          </div>
+
+          <div class="map-legend">
+            <div class="legend-item">
+              <span
+                class="legend-dot"
+                style="background:#ff4757"
+              ></span>
+              SOS
+            </div>
+
+            <div class="legend-item">
+              <span
+                class="legend-dot"
+                style="background:#3da5ff"
+              ></span>
+              RESOURCE
+            </div>
+
+            <div class="legend-item">
+              <span
+                class="legend-dot"
+                style="background:#42e695"
+              ></span>
+              SAFE
+            </div>
+
+            <div class="legend-item">
+              <span
+                class="legend-dot"
+                style="background:#ffc857"
+              ></span>
+              BROADCAST
+            </div>
+          </div>
+
+          <div class="telemetry">
+
+            <div class="telemetry-item">
+              <span class="telemetry-label">Sample Rate</span>
+              <span id="sampleRate" class="telemetry-value">
+                ----
+              </span>
+            </div>
+
+            <div class="telemetry-item">
+              <span class="telemetry-label">FFT Size</span>
+              <span id="fftSize" class="telemetry-value">
+                2048
+              </span>
+            </div>
+
+            <div class="telemetry-item">
+              <span class="telemetry-label">Detected Frequency</span>
+              <span id="detectedFrequency" class="telemetry-value">
+                ----
+              </span>
+            </div>
+
+            <div class="telemetry-item">
+              <span class="telemetry-label">Signal Strength</span>
+              <span id="signalStrength" class="telemetry-value">
+                ----
+              </span>
+            </div>
+
+            <div class="telemetry-item">
+              <span class="telemetry-label">RX State</span>
+              <span id="rxState" class="telemetry-value">
+                OFF
+              </span>
+            </div>
+
+            <div class="telemetry-item">
+              <span class="telemetry-label">Packets</span>
+              <span id="packetCount" class="telemetry-value">
+                0
+              </span>
+            </div>
+
+          </div>
+
+        </div>
+      </section>
+
+    </main>
+
+    <!-- ==========================================================
+         FOOTER
+         ========================================================== -->
+
+    <footer>
+      <span>
+        ACOUSTICMESH v0.1 • CLIENT-SIDE ONLY
+      </span>
+
+      <span class="footer-accent">
+        THE NETWORK IS THE AIR.
+      </span>
+
+      <span>
+        NO CLOUD • NO API • NO CDN
+      </span>
+    </footer>
+
+  </div>
+
+  <script>
+    "use strict";
+
+    /* ============================================================
+       ACOUSTICMESH
+       Offline Acoustic Emergency Signaling Engine
+
+       Architecture:
+
+       UI
+        ↓
+       Packet Builder
+        ↓
+       Acoustic Transmitter
+        ↓
+       Speaker
+        ↓
+       Air
+        ↓
+       Microphone
+        ↓
+       FFT
+        ↓
+       Symbol Detector
+        ↓
+       Packet Decoder
+        ↓
+       Event Store
+        ↓
+       Incident Feed + Tactical Map
+
+       IMPORTANT:
+       This is a local browser application. No network requests
+       are made by this code.
+       ============================================================ */
+
+
+    /* ============================================================
+       1. CONFIGURATION
+       ============================================================ */
+
+    const CONFIG = {
+      storageKey: "acousticmesh.events.v1",
+      nodeKey: "acousticmesh.node.v1",
+
+      fftSize: 2048,
+
+      /* Frequency symbols */
+      frequencies: {
+        SYNC: 17000,
+        SOS: 18000,
+        RESOURCE: 18500,
+        SAFE: 19000,
+        BROADCAST: 19500,
+
+        ACK: 20000,
+        END: 16500
+      },
+
+      /*
+       * Each acoustic symbol is held long enough to produce
+       * multiple FFT frames on commodity hardware.
+       */
+      symbolDuration: 180,
+
+      symbolGap: 35,
+
+      /*
+       * Frequency matching tolerance.
+       */
+      frequencyTolerance: 110,
+
+      /*
+       * Minimum spectral amplitude.
+       * getByteFrequencyData() produces values from 0-255.
+       */
+      amplitudeThreshold: 105,
+
+      /*
+       * A valid symbol must remain visible for multiple
+       * consecutive frames.
+       */
+      requiredStableFrames: 3,
+
+      /*
+       * Prevent one transmission from producing dozens
+       * of duplicate events.
+       */
+      duplicateCooldown: 1800,
+
+      /*
+       * Maximum event history.
+       */
+      maxEvents: 300,
+
+      /*
+       * Carrier gain.
+       *
+       * This deliberately stays conservative to reduce
+       * speaker distortion and microphone feedback.
+       */
+      transmitGain: 0.14
+    };
+
+
+    /* ============================================================
+       2. COMMAND DEFINITIONS
+       ============================================================ */
+
+    const COMMANDS = {
+      SOS: {
+        frequency: CONFIG.frequencies.SOS,
+        icon: "🚨",
+        className: "sos"
+      },
+
+      RESOURCE: {
+        frequency: CONFIG.frequencies.RESOURCE,
+        icon: "💧",
+        className: "resource"
+      },
+
+      SAFE: {
+        frequency: CONFIG.frequencies.SAFE,
+        icon: "💚",
+        className: "safe"
+      },
+
+      BROADCAST: {
+        frequency: CONFIG.frequencies.BROADCAST,
+        icon: "📢",
+        className: "broadcast"
+      },
+
+      ACK: {
+        frequency: CONFIG.frequencies.ACK,
+        icon: "✓",
+        className: "ack"
+      }
+    };
+
+
+    /* ============================================================
+       3. DOM REFERENCES
+       ============================================================ */
+
+    const $ = (selector) => document.querySelector(selector);
+
+    const startButton = $("#startButton");
+    const repeatButton = $("#repeatButton");
+
+    const systemDot = $("#systemDot");
+    const systemStatus = $("#systemStatus");
+
+    const nodeIdDisplay = $("#nodeIdDisplay");
+    const clock = $("#clock");
+
+    const audioState = $("#audioState");
+    const radarStatus = $("#radarStatus");
+
+    const txProgress = $("#txProgress");
+    const txState = $("#txState");
+    const txTimer = $("#txTimer");
+    const lastTx = $("#lastTx");
+
+    const feed = $("#feed");
+    const emptyFeed = $("#emptyFeed");
+    const eventCount = $("#eventCount");
+
+    const mapCanvas = $("#mapCanvas");
+
+    const sampleRateDisplay = $("#sampleRate");
+    const fftSizeDisplay = $("#fftSize");
+    const detectedFrequencyDisplay = $("#detectedFrequency");
+    const signalStrengthDisplay = $("#signalStrength");
+    const rxStateDisplay = $("#rxState");
+    const packetCountDisplay = $("#packetCount");
+
+    const commandButtons = [
+      ...document.querySelectorAll("[data-command]")
+    ];
+
+
+    /* ============================================================
+       4. APPLICATION STATE
+       ============================================================ */
+
+    const state = {
+      audioContext: null,
+      microphoneStream: null,
+      microphoneSource: null,
+      analyser: null,
+      frequencyData: null,
+
+      audioReady: false,
+      receiverRunning: false,
+      transmitting: false,
+
+      nodeId: null,
+      sequence: 0,
+
+      events: [],
+      packetCount: 0,
+
+      lastCommand: null,
+      lastPacketTime: 0,
+
+      detector: {
+        candidate: null,
+        stableFrames: 0,
+        lastDetectedFrequency: 0,
+        lastStrength: 0
+      },
+
+      mapMarkers: []
+    };
+
+
+    /* ============================================================
+       5. NODE IDENTITY
+       ============================================================ */
+
+    function createNodeId() {
+      const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+      let id = "AM-";
+
+      for (let i = 0; i < 4; i++) {
+        id += alphabet[
+          Math.floor(Math.random() * alphabet.length)
+        ];
+      }
+
+      return id;
+    }
+
+
+    function getNodeId() {
+      const stored = localStorage.getItem(CONFIG.nodeKey);
+
+      if (stored) {
+        return stored;
+      }
+
+      const id = createNodeId();
+
+      localStorage.setItem(CONFIG.nodeKey, id);
+
+      return id;
+    }
+
+
+    state.nodeId = getNodeId();
+
+    nodeIdDisplay.textContent = state.nodeId;
+
+
+    /* ============================================================
+       6. CLOCK
+       ============================================================ */
+
+    function updateClock() {
+      const now = new Date();
+
+      clock.textContent = now.toLocaleTimeString([], {
+        hour12: false
+      });
+    }
+
+    updateClock();
+
+    setInterval(updateClock, 1000);
+
+
+    /* ============================================================
+       7. LOCAL EVENT STORAGE
+       ============================================================ */
+
+    function loadEvents() {
+      try {
+        const raw = localStorage.getItem(CONFIG.storageKey);
+
+        if (!raw) {
+          state.events = [];
+          return;
+        }
+
+        const parsed = JSON.parse(raw);
+
+        if (!Array.isArray(parsed)) {
+          state.events = [];
+          return;
+        }
+
+        state.events = parsed.slice(
+          -CONFIG.maxEvents
+        );
+
+      } catch (error) {
+        console.error(
+          "AcousticMesh: failed to load events",
+          error
+        );
+
+        state.events = [];
+      }
+    }
+
+
+    function saveEvents() {
+      try {
+        state.events = state.events.slice(
+          -CONFIG.maxEvents
+        );
+
+        localStorage.setItem(
+          CONFIG.storageKey,
+          JSON.stringify(state.events)
+        );
+
+      } catch (error) {
+        console.error(
+          "AcousticMesh: failed to save events",
+          error
+        );
+      }
+    }
+
+
+    loadEvents();
+
+
+    /* ============================================================
+       8. EVENT CREATION
+       ============================================================ */
+
+    function createEvent({
+      command,
+      direction,
+      frequency,
+      signalStrength,
+      verified,
+      sequence
+    }) {
+
+      const event = {
+        id:
+          `${Date.now()}-${Math.random()
+            .toString(36)
+            .slice(2, 8)}`,
+
+        nodeId: state.nodeId,
+
+        sequence:
+          sequence ?? state.sequence,
+
+        command,
+
+        direction,
+
+        frequency,
+
+        signalStrength:
+
+          typeof signalStrength === "number"
+            ? Math.round(signalStrength)
+            : null,
+
+        verified:
+          Boolean(verified),
+
+        timestamp:
+          new Date().toISOString()
+      };
+
+      state.events.push(event);
+
+      saveEvents();
+
+      renderFeed();
+
+      addMapMarker(event);
+
+      return event;
+    }
+
+
+    /* ============================================================
+       9. EVENT FEED
+       ============================================================ */
+
+    function commandLabel(command) {
+      return {
+        SOS: "🚨 SOS",
+        RESOURCE: "💧 RESOURCE",
+        SAFE: "💚 SAFE",
+        BROADCAST: "📢 BROADCAST",
+        ACK: "✓ ACKNOWLEDGEMENT"
+      }[command] || command;
+    }
+
+
+    function formatTime(timestamp) {
+      return new Date(timestamp).toLocaleTimeString([], {
+        hour12: false
+      });
+    }
+
+
+    function renderFeed() {
+
+      if (!state.events.length) {
+        emptyFeed.style.display = "block";
+
+        eventCount.textContent = "0 EVENTS";
+
+        return;
+      }
+
+      emptyFeed.style.display = "none";
+
+      eventCount.textContent =
+        `${state.events.length} EVENT` +
+        `${state.events.length === 1 ? "" : "S"}`;
+
+      /*
+       * Newest events first.
+       */
+      const ordered =
+        [...state.events].reverse();
+
+      feed.innerHTML = "";
+
+      for (const event of ordered) {
+
+        const card =
+          document.createElement("div");
+
+        const commandInfo =
+          COMMANDS[event.command] ||
+          COMMANDS.BROADCAST;
+
+        card.className =
+          `event-card ${commandInfo.className}`;
+
+        const directionLabel =
+          event.direction === "TX"
+            ? "LOCAL TX"
+            : "ACOUSTIC RX";
+
+        const verification =
+          event.verified
+            ? `<span class="verified">VERIFIED</span>`
+            : "UNVERIFIED";
+
+        const strength =
+          event.signalStrength === null
+            ? "--"
+            : `${event.signalStrength}%`;
+
+        card.innerHTML = `
+          <div class="event-top">
+            <span class="event-command">
+              ${commandLabel(event.command)}
+            </span>
+
+            <span class="event-time">
+              ${formatTime(event.timestamp)}
+            </span>
+          </div>
+
+          <div class="event-details">
+
+            <div class="event-detail">
+              <span class="detail-label">
+                Direction
+              </span>
+
+              <span class="detail-value ${
+                event.direction === "TX"
+                  ? "local"
+                  : ""
+              }">
+                ${directionLabel}
+              </span>
+            </div>
+
+            <div class="event-detail">
+              <span class="detail-label">
+                Node
+              </span>
+
+              <span class="detail-value">
+                ${event.nodeId}
+              </span>
+            </div>
+
+            <div class="event-detail">
+              <span class="detail-label">
+                Signal
+              </span>
+
+              <span class="detail-value">
+                ${strength}
+              </span>
+            </div>
+
+            <div class="event-detail">
+              <span class="detail-label">
+                Frequency
+              </span>
+
+              <span class="detail-value">
+                ${event.frequency
+                  ? `${event.frequency} Hz`
+                  : "--"}
+              </span>
+            </div>
+
+            <div class="event-detail">
+              <span class="detail-label">
+                Sequence
+              </span>
+
+              <span class="detail-value">
+                #${event.sequence}
+              </span>
+            </div>
+
+            <div class="event-detail">
+              <span class="detail-label">
+                Integrity
+              </span>
+
+              <span class="detail-value">
+                ${verification}
+              </span>
+            </div>
+
+          </div>
+        `;
+
+        feed.appendChild(card);
+      }
+    }
+
+
+    renderFeed();
+
+
+    /* ============================================================
+       10. AUDIO INITIALIZATION
+       ============================================================ */
+
+    async function initializeAudio() {
+
+      if (state.audioReady) {
+        return true;
+      }
+
+      try {
+
+        /*
+         * AudioContext must be created after a user gesture.
+         */
+        const AudioContextClass =
+          window.AudioContext ||
+          window.webkitAudioContext;
+
+        if (!AudioContextClass) {
+          throw new Error(
+            "Web Audio API is not supported by this browser."
+          );
+        }
+
+        state.audioContext =
+          new AudioContextClass();
+
+
+        /*
+         * Request microphone access.
+         *
+         * Disable browser processing where possible because
+         * automatic gain/noise cancellation can distort our
+         * narrow-band acoustic symbols.
+         */
+        state.microphoneStream =
+          await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: false,
+              noiseSuppression: false,
+              autoGainControl: false,
+              channelCount: 1
+            }
+          });
+
+
+        state.microphoneSource =
+          state.audioContext.createMediaStreamSource(
+            state.microphoneStream
+          );
+
+
+        state.analyser =
+          state.audioContext.createAnalyser();
+
+        state.analyser.fftSize =
+          CONFIG.fftSize;
+
+        state.analyser.smoothingTimeConstant =
+          0.15;
+
+        state.frequencyData =
+          new Uint8Array(
+            state.analyser.frequencyBinCount
+          );
+
+
+        state.microphoneSource.connect(
+          state.analyser
+        );
+
+
+        if (
+          state.audioContext.state ===
+          "suspended"
+        ) {
+          await state.audioContext.resume();
+        }
+
+
+        state.audioReady = true;
+        state.receiverRunning = true;
+
+
+        /*
+         * UI state.
+         */
+        startButton.textContent =
+          "SYSTEM ACTIVE";
+
+        startButton.classList.add("started");
+
+        systemStatus.textContent =
+          "ACTIVE";
+
+        systemDot.classList.add("ready");
+
+        audioState.textContent =
+          "READY";
+
+        radarStatus.textContent =
+          "SCANNING";
+
+        rxStateDisplay.textContent =
+          "LISTENING";
+
+        sampleRateDisplay.textContent =
+          `${Math.round(
+            state.audioContext.sampleRate
+          )} Hz`;
+
+        fftSizeDisplay.textContent =
+          String(CONFIG.fftSize);
+
+
+        commandButtons.forEach(
+          button => {
+            button.disabled = false;
+            button.classList.remove("disabled");
+          }
+        );
+
+        repeatButton.disabled =
+          !state.lastCommand;
+
+        /*
+         * Start continuous FFT processing.
+         */
+        requestAnimationFrame(
+          receiverLoop
+        );
+
+        return true;
+
+      } catch (error) {
+
+        console.error(
+          "AcousticMesh audio initialization failed:",
+          error
+        );
+
+        systemStatus.textContent =
+          "AUDIO ERROR";
+
+        systemDot.classList.add("error");
+
+        audioState.textContent =
+          "MICROPHONE UNAVAILABLE";
+
+        rxStateDisplay.textContent =
+          "ERROR";
+
+        /*
+         * Keep the application usable for local event
+         * logging even if the browser denies microphone
+         * access.
+         */
+        alert(
+          "AcousticMesh could not access the microphone.\n\n" +
+          "Please allow microphone access and try again.\n\n" +
+          "If you opened index.html directly, use a local " +
+          "HTTPS/localhost server because browser microphone " +
+          "permissions may be blocked for file:// pages."
+        );
+
+        return false;
+      }
+    }
+
+
+    /* ============================================================
+       11. FREQUENCY MATH
+       ============================================================ */
+
+    function frequencyToBin(frequency) {
+
+      if (
+        !state.audioContext ||
+        !state.analyser
+      ) {
+        return 0;
+      }
+
+      /*
+       * FFT bin formula:
+
+         bin = frequency × FFT size / sample rate
+       */
+      return Math.round(
+        frequency *
+        state.analyser.fftSize /
+        state.audioContext.sampleRate
+      );
+    }
+
+
+    function binToFrequency(bin) {
+
+      return (
+        bin *
+        state.audioContext.sampleRate /
+        state.analyser.fftSize
+      );
+    }
+
+
+    /* ============================================================
+       12. SPECTRAL PEAK DETECTION
+       ============================================================ */
+
+    function detectStrongestSymbol() {
+
+      if (
+        !state.analyser ||
+        !state.frequencyData
+      ) {
+        return null;
+      }
+
+      state.analyser.getByteFrequencyData(
+        state.frequencyData
+      );
+
+
+      let strongest = null;
+
+
+      const candidates = [
+        ["SYNC", CONFIG.frequencies.SYNC],
+        ["SOS", CONFIG.frequencies.SOS],
+        ["RESOURCE", CONFIG.frequencies.RESOURCE],
+        ["SAFE", CONFIG.frequencies.SAFE],
+        ["BROADCAST", CONFIG.frequencies.BROADCAST],
+        ["ACK", CONFIG.frequencies.ACK],
+        ["END", CONFIG.frequencies.END]
+      ];
+
+
+      for (const [symbol, target] of candidates) {
+
+        const centerBin =
+          frequencyToBin(target);
+
+        const toleranceBins =
+          Math.max(
+            1,
+            Math.ceil(
+              CONFIG.frequencyTolerance *
+              CONFIG.fftSize /
+              state.audioContext.sampleRate
+            )
+          );
+
+
+        let peakAmplitude = 0;
+        let peakBin = centerBin;
+
+
+        const start =
+          Math.max(
+            0,
+            centerBin - toleranceBins
+          );
+
+        const end =
+          Math.min(
+            state.frequencyData.length - 1,
+            centerBin + toleranceBins
+          );
+
+
+        /*
+         * Search around the target frequency for
+         * the strongest FFT bin.
+         */
+        for (
+          let bin = start;
+          bin <= end;
+          bin++
+        ) {
+
+          const amplitude =
+            state.frequencyData[bin];
+
+          if (
+            amplitude >
+            peakAmplitude
+          ) {
+            peakAmplitude =
+              amplitude;
+
+            peakBin = bin;
+          }
+        }
+
+
+        if (
+          peakAmplitude <
+          CONFIG.amplitudeThreshold
+        ) {
+          continue;
+        }
+
+
+        const detectedFrequency =
+          binToFrequency(peakBin);
+
+
+        const frequencyError =
+          Math.abs(
+            detectedFrequency -
+            target
+          );
+
+
+        if (
+          frequencyError >
+          CONFIG.frequencyTolerance
+        ) {
+          continue;
+        }
+
+
+        const strength =
+          Math.min(
+            100,
+            Math.round(
+              peakAmplitude / 255 * 100
+            )
+          );
+
+
+        if (
+          !strongest ||
+          peakAmplitude >
+          strongest.amplitude
+        ) {
+
+          strongest = {
+            symbol,
+            targetFrequency: target,
+            detectedFrequency,
+            amplitude: peakAmplitude,
+            strength
+          };
+        }
+      }
+
+
+      return strongest;
+    }
+
+
+    /* ============================================================
+       13. PACKET DETECTOR
+       ============================================================ */
+
+    function processDetectedSymbol(
+      detection
+    ) {
+
+      if (!detection) {
+
+        /*
+         * Slowly reset stability when no valid symbol
+         * is visible.
+         */
+        state.detector.stableFrames = 0;
+
+        return;
+      }
+
+
+      detectedFrequencyDisplay.textContent =
+        `${Math.round(
+          detection.detectedFrequency
+        )} Hz`;
+
+      signalStrengthDisplay.textContent =
+        `${detection.strength}%`;
+
+
+      /*
+       * Same symbol as previous FFT frame.
+       */
+      if (
+        state.detector.candidate ===
+        detection.symbol
+      ) {
+
+        state.detector.stableFrames++;
+
+      } else {
+
+        state.detector.candidate =
+          detection.symbol;
+
+        state.detector.stableFrames = 1;
+      }
+
+
+      /*
+       * Require multiple consecutive frames.
+       */
+      if (
+        state.detector.stableFrames <
+        CONFIG.requiredStableFrames
+      ) {
+        return;
+      }
+
+
+      /*
+       * Reset immediately so the same physical tone
+       * cannot repeatedly generate events.
+       */
+      state.detector.stableFrames = 0;
+
+      handleAcousticSymbol(
+        detection.symbol,
+        detection
+      );
+    }
+
+
+    /* ============================================================
+       14. SIMPLE PACKET STATE MACHINE
+       ============================================================ */
+
+    const receiverPacket = {
+      active: false,
+      startedAt: 0,
+      command: null,
+      frequency: null,
+      strength: 0,
+      symbols: []
+    };
+
+
+    function resetReceiverPacket() {
+
+      receiverPacket.active = false;
+      receiverPacket.startedAt = 0;
+      receiverPacket.command = null;
+      receiverPacket.frequency = null;
+      receiverPacket.strength = 0;
+      receiverPacket.symbols = [];
+    }
+
+
+    function handleAcousticSymbol(
+      symbol,
+      detection
+    ) {
+
+      /*
+       * SYNC begins a packet.
+       */
+      if (symbol === "SYNC") {
+
+        receiverPacket.active = true;
+        receiverPacket.startedAt = Date.now();
+        receiverPacket.command = null;
+        receiverPacket.frequency = null;
+        receiverPacket.strength =
+          detection.strength;
+        receiverPacket.symbols = ["SYNC"];
+
+        return;
+      }
+
+
+      /*
+       * Ignore commands without a synchronization
+       * symbol. This reduces random environmental
+       * false positives.
+       */
+      if (!receiverPacket.active) {
+        return;
+      }
+
+
+      /*
+       * Timeout.
+       */
+      if (
+        Date.now() -
+        receiverPacket.startedAt >
+        4000
+      ) {
+
+        resetReceiverPacket();
+
+        return;
+      }
+
+
+      receiverPacket.symbols.push(
+        symbol
+      );
+
+
+      if (
+        symbol === "SOS" ||
+        symbol === "RESOURCE" ||
+        symbol === "SAFE" ||
+        symbol === "BROADCAST"
+      ) {
+
+        receiverPacket.command =
+          symbol;
+
+        receiverPacket.frequency =
+          detection.detectedFrequency;
+
+        receiverPacket.strength =
+          Math.max(
+            receiverPacket.strength,
+            detection.strength
+          );
+
+        return;
+      }
+
+
+      /*
+       * END validates and commits the packet.
+       */
+      if (symbol === "END") {
+
+        finalizeReceivedPacket();
+
+        return;
+      }
+
+
+      /*
+       * ACK is treated as a complete packet on
+       * its own if it follows synchronization.
+       */
+      if (symbol === "ACK") {
+
+        receiverPacket.command =
+          "ACK";
+
+        receiverPacket.frequency =
+          detection.detectedFrequency;
+
+        finalizeReceivedPacket();
+      }
+    }
+
+
+    /* ============================================================
+       15. PACKET VALIDATION
+       ============================================================ */
+
+    function finalizeReceivedPacket() {
+
+      const packet =
+        { ...receiverPacket };
+
+      resetReceiverPacket();
+
+
+      if (!packet.command) {
+        return;
+      }
+
+
+      /*
+       * Duplicate suppression.
+       *
+       * The physical microphone can hear the same
+       * acoustic packet over multiple frames.
+       */
+      const now = Date.now();
+
+      if (
+        now -
+        state.lastPacketTime <
+        CONFIG.duplicateCooldown
+      ) {
+        return;
+      }
+
+      state.lastPacketTime = now;
+
+
+      state.packetCount++;
+
+      packetCountDisplay.textContent =
+        String(state.packetCount);
+
+
+      /*
+       * A valid packet has:
+       *
+       * SYNC
+       * COMMAND
+       * END
+       *
+       * ACK may terminate immediately.
+       */
+      const valid =
+        packet.symbols.includes("SYNC") &&
+        packet.symbols.includes(
+          packet.command
+        );
+
+
+      if (!valid) {
+        return;
+      }
+
+
+      createEvent({
+        command: packet.command,
+        direction: "RX",
+        frequency:
+          Math.round(
+            packet.frequency ||
+            COMMANDS[packet.command]?.frequency ||
+            0
+          ),
+        signalStrength:
+          packet.strength,
+        verified: true,
+        sequence: state.packetCount
+      });
+
+
+      /*
+       * Update receiver telemetry.
+       */
+      rxStateDisplay.textContent =
+        "PACKET VERIFIED";
+
+
+      setTimeout(() => {
+
+        if (state.receiverRunning) {
+          rxStateDisplay.textContent =
+            "LISTENING";
+        }
+
+      }, 900);
+    }
+
+
+    /* ============================================================
+       16. RECEIVER LOOP
+       ============================================================ */
+
+    function receiverLoop() {
+
+      if (
+        state.receiverRunning &&
+        state.audioReady
+      ) {
+
+        const detection =
+          detectStrongestSymbol();
+
+        processDetectedSymbol(
+          detection
+        );
+      }
+
+
+      requestAnimationFrame(
+        receiverLoop
+      );
+    }
+
+
+    /* ============================================================
+       17. CHECKSUM
+       ============================================================ */
+
+    function checksum(text) {
+
+      /*
+       * Small deterministic 8-bit checksum.
+       *
+       * This isn't cryptographic.
+       * It exists to detect accidental corruption
+       * in a lightweight emergency signaling protocol.
+       */
+      let value = 0;
+
+      for (
+        let i = 0;
+        i < text.length;
+        i++
+      ) {
+
+        value =
+          (value +
+            text.charCodeAt(i)) &
+          0xff;
+
+        value =
+          ((value << 1) |
+            (value >> 7)) &
+          0xff;
+      }
+
+      return value
+        .toString(16)
+        .padStart(2, "0")
+        .toUpperCase();
+    }
+
+
+    /* ============================================================
+       18. PACKET BUILDER
+       ============================================================ */
+
+    function buildPacket(command) {
+
+      state.sequence++;
+
+      const sequence =
+        state.sequence
+          .toString(16)
+          .padStart(4, "0")
+          .slice(-4);
+
+      const body =
+        `${state.nodeId}|${sequence}|${command}`;
+
+      const crc =
+        checksum(body);
+
+      /*
+       * Logical packet representation.
+       *
+       * Acoustic layer transmits the control symbols.
+       */
+      return {
+        nodeId: state.nodeId,
+        sequence,
+        command,
+        crc,
+
+        symbols: [
+          "SYNC",
+          "SYNC",
+          command,
+          "END"
+        ]
+      };
+    }
+
+
+    /* ============================================================
+       19. ACOUSTIC SYMBOL TRANSMISSION
+       ============================================================ */
+
+    function sleep(ms) {
+
+      return new Promise(
+        resolve => setTimeout(
+          resolve,
+          ms
+        )
+      );
+    }
+
+
+    async function transmitSymbol(
+      symbol
+    ) {
+
+      const frequency =
+        CONFIG.frequencies[symbol];
+
+      if (!frequency) {
+        throw new Error(
+          `Unknown acoustic symbol: ${symbol}`
+        );
+      }
+
+
+      const context =
+        state.audioContext;
+
+
+      /*
+       * Create oscillator and gain envelope.
+       */
+      const oscillator =
+        context.createOscillator();
+
+      const gain =
+        context.createGain();
+
+
+      oscillator.type = "sine";
+
+      oscillator.frequency.setValueAtTime(
+        frequency,
+        context.currentTime
+      );
+
+
+      /*
+       * Start essentially silent.
+       */
+      gain.gain.setValueAtTime(
+        0.0001,
+        context.currentTime
+      );
+
+
+      /*
+       * Very short attack.
+       */
+      gain.gain.exponentialRampToValueAtTime(
+        CONFIG.transmitGain,
+        context.currentTime + 0.025
+      );
+
+
+      const duration =
+        CONFIG.symbolDuration / 1000;
+
+
+      const releaseStart =
+        context.currentTime +
+        duration -
+        0.045;
+
+
+      /*
+       * Smooth release prevents clicks.
+       */
+      gain.gain.setValueAtTime(
+        CONFIG.transmitGain,
+        releaseStart
+      );
+
+
+      gain.gain.exponentialRampToValueAtTime(
+        0.0001,
+        context.currentTime +
+        duration
+      );
+
+
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+
+
+      oscillator.start();
+
+
+      oscillator.stop(
+        context.currentTime +
+        duration +
+        0.01
+      );
+
+
+      await sleep(
+        CONFIG.symbolDuration
+      );
+
+
+      await sleep(
+        CONFIG.symbolGap
+      );
+    }
+
+
+    /* ============================================================
+       20. TRANSMIT COMPLETE PACKET
+       ============================================================ */
+
+    async function transmitPacket(
+      command
+    ) {
+
+      if (!state.audioReady) {
+        alert(
+          "Initialize the Audio Engine first."
+        );
+
+        return;
+      }
+
+
+      if (state.transmitting) {
+        return;
+      }
+
+
+      state.transmitting = true;
+
+
+      const packet =
+        buildPacket(command);
+
+
+      state.lastCommand =
+        command;
+
+
+      repeatButton.disabled = false;
+
+      lastTx.textContent =
+        command;
+
+
+      txState.textContent =
+        `TRANSMITTING ${command}`;
+
+
+      try {
+
+        const total =
+          packet.symbols.length;
+
+
+        for (
+          let i = 0;
+          i < total;
+          i++
+        ) {
+
+          const symbol =
+            packet.symbols[i];
+
+
+          txState.textContent =
+            `TX ${symbol}`;
+
+
+          const percent =
+            Math.round(
+              i / total * 100
+            );
+
+          txProgress.style.width =
+            `${percent}%`;
+
+
+          await transmitSymbol(
+            symbol
+          );
+        }
+
+
+        txProgress.style.width =
+          "100%";
+
+
+        txState.textContent =
+          "PACKET SENT";
+
+
+        /*
+         * Record local transmission immediately.
+         */
+        createEvent({
+          command,
+          direction: "TX",
+          frequency:
+            COMMANDS[command]?.frequency ||
+            0,
+          signalStrength: null,
+          verified: true,
+          sequence: state.sequence
+        });
+
+
+        /*
+         * Optional local acknowledgement simulation
+         * is deliberately NOT used.
+         *
+         * The demo should distinguish a sent packet from
+         * a packet actually heard by another device.
+         */
+
+      } catch (error) {
+
+        console.error(
+          "Transmission failed:",
+          error
+        );
+
+        txState.textContent =
+          "TX ERROR";
+
+      } finally {
+
+        state.transmitting = false;
+
+
+        setTimeout(() => {
+
+          txProgress.style.width =
+            "0%";
+
+          txTimer.textContent =
+            "0.0s";
+
+          if (!state.transmitting) {
+            txState.textContent =
+              "TRANSMITTER READY";
+          }
+
+        }, 900);
+      }
+    }
+
+
+    /* ============================================================
+       21. COMMAND BUTTONS
+       ============================================================ */
+
+    commandButtons.forEach(
+      button => {
+
+        button.addEventListener(
+          "click",
+          () => {
+
+            const command =
+              button.dataset.command;
+
+            transmitPacket(command);
+          }
+        );
+      }
+    );
+
+
+    /* ============================================================
+       22. REPEAT
+       ============================================================ */
+
+    repeatButton.addEventListener(
+      "click",
+      () => {
+
+        if (state.lastCommand) {
+          transmitPacket(
+            state.lastCommand
+          );
+        }
+      }
+    );
+
+
+    /* ============================================================
+       23. START SYSTEM
+       ============================================================ */
+
+    startButton.addEventListener(
+      "click",
+      async () => {
+
+        startButton.disabled = true;
+
+        startButton.textContent =
+          "INITIALIZING...";
+
+
+        const success =
+          await initializeAudio();
+
+
+        if (!success) {
+
+          startButton.disabled =
+            false;
+
+          startButton.textContent =
+            "RETRY INITIALIZATION";
+        }
+      }
+    );
+
+
+    /* ============================================================
+       24. TACTICAL MAP
+       ============================================================ */
+
+    const markerColors = {
+      SOS: "#ff4757",
+      RESOURCE: "#3da5ff",
+      SAFE: "#42e695",
+      BROADCAST: "#ffc857",
+      ACK: "#b388ff"
+    };
+
+
+    function resizeMapCanvas() {
+
+      const rect =
+        mapCanvas.getBoundingClientRect();
+
+      const dpr =
+        window.devicePixelRatio || 1;
+
+
+      mapCanvas.width =
+        Math.max(
+          1,
+          Math.floor(
+            rect.width * dpr
+          )
+        );
+
+      mapCanvas.height =
+        Math.max(
+          1,
+          Math.floor(
+            rect.height * dpr
+          )
+        );
+
+
+      const context =
+        mapCanvas.getContext("2d");
+
+      context.setTransform(
+        dpr,
+        0,
+        0,
+        dpr,
+        0,
+        0
+      );
+
+
+      drawMap();
+    }
+
+
+    function drawMap() {
+
+      const context =
+        mapCanvas.getContext("2d");
+
+      const width =
+        mapCanvas.clientWidth;
+
+      const height =
+        mapCanvas.clientHeight;
+
+
+      context.clearRect(
+        0,
+        0,
+        width,
+        height
+      );
+
+
+      /*
+       * Background.
+       */
+      context.fillStyle =
+        "#070b0f";
+
+      context.fillRect(
+        0,
+        0,
+        width,
+        height
+      );
+
+
+      /*
+       * Grid.
+       */
+      const gridSize = 32;
+
+      context.strokeStyle =
+        "rgba(61,165,255,0.075)";
+
+      context.lineWidth = 1;
+
+
+      for (
+        let x = 0;
+        x <= width;
+        x += gridSize
+      ) {
+
+        context.beginPath();
+
+        context.moveTo(x, 0);
+        context.lineTo(x, height);
+
+        context.stroke();
+      }
+
+
+      for (
+        let y = 0;
+        y <= height;
+        y += gridSize
+      ) {
+
+        context.beginPath();
+
+        context.moveTo(0, y);
+        context.lineTo(width, y);
+
+        context.stroke();
+      }
+
+
+      /*
+       * Main roads.
+       */
+      context.strokeStyle =
+        "rgba(160,175,190,0.13)";
+
+      context.lineWidth = 5;
+
+
+      context.beginPath();
+
+      context.moveTo(
+        width * 0.05,
+        height * 0.75
+      );
+
+      context.lineTo(
+        width * 0.32,
+        height * 0.58
+      );
+
+      context.lineTo(
+        width * 0.52,
+        height * 0.62
+      );
+
+      context.lineTo(
+        width * 0.95,
+        height * 0.25
+      );
+
+      context.stroke();
+
+
+      context.beginPath();
+
+      context.moveTo(
+        width * 0.22,
+        height * 0.05
+      );
+
+      context.lineTo(
+        width * 0.39,
+        height * 0.35
+      );
+
+      context.lineTo(
+        width * 0.57,
+        height * 0.49
+      );
+
+      context.lineTo(
+        width * 0.76,
+        height * 0.93
+      );
+
+      context.stroke();
+
+
+      /*
+       * Secondary roads.
+       */
+      context.strokeStyle =
+        "rgba(140,155,170,0.09)";
+
+      context.lineWidth = 2;
+
+
+      for (let i = 0; i < 5; i++) {
+
+        const y =
+          height *
+          (0.15 + i * 0.16);
+
+        context.beginPath();
+
+        context.moveTo(
+          width * 0.03,
+          y
+        );
+
+        context.lineTo(
+          width * 0.95,
+          y -
+          height * 0.1
+        );
+
+        context.stroke();
+      }
+
+
+      /*
+       * Local zone boundaries.
+       */
+      context.setLineDash([5, 6]);
+
+      context.strokeStyle =
+        "rgba(66,230,149,0.13)";
+
+      context.lineWidth = 1;
+
+
+      context.strokeRect(
+        width * 0.1,
+        height * 0.12,
+        width * 0.3,
+        height * 0.28
+      );
+
+
+      context.strokeRect(
+        width * 0.58,
+        height * 0.52,
+        width * 0.29,
+        height * 0.3
+      );
+
+
+      context.setLineDash([]);
+
+
+      /*
+       * Zone labels.
+       */
+      context.font =
+        "9px SFMono-Regular, Consolas, monospace";
+
+      context.fillStyle =
+        "rgba(135,149,163,0.55)";
+
+      context.fillText(
+        "ZONE A",
+        width * 0.12,
+        height * 0.17
+      );
+
+      context.fillText(
+        "ZONE B",
+        width * 0.60,
+        height * 0.57
+      );
+
+
+      /*
+       * Current node.
+       */
+      drawMarker(
+        context,
+        width * 0.5,
+        height * 0.5,
+        "#42e695",
+        "LOCAL"
+      );
+
+
+      /*
+       * Historical incident markers.
+       */
+      for (
+        const marker of state.mapMarkers
+      ) {
+
+        drawMarker(
+          context,
+          marker.x * width,
+          marker.y * height,
+          marker.color,
+          marker.label
+        );
+      }
+    }
+
+
+    function drawMarker(
+      context,
+      x,
+      y,
+      color,
+      label
+    ) {
+
+      /*
+       * Glow.
+       */
+      context.beginPath();
+
+      context.arc(
+        x,
+        y,
+        10,
+        0,
+        Math.PI * 2
+      );
+
+      context.fillStyle =
+        color + "20";
+
+      context.fill();
+
+
+      /*
+       * Outer ring.
+       */
+      context.beginPath();
+
+      context.arc(
+        x,
+        y,
+        5,
+        0,
+        Math.PI * 2
+      );
+
+      context.strokeStyle =
+        color;
+
+      context.lineWidth = 1;
+
+      context.stroke();
+
+
+      /*
+       * Center.
+       */
+      context.beginPath();
+
+      context.arc(
+        x,
+        y,
+        2.5,
+        0,
+        Math.PI * 2
+      );
+
+      context.fillStyle =
+        color;
+
+      context.fill();
+
+
+      /*
+       * Label.
+       */
+      context.font =
+        "7px SFMono-Regular, Consolas, monospace";
+
+      context.fillStyle =
+        color;
+
+      context.fillText(
+        label,
+        x + 9,
+        y + 3
+      );
+    }
+
+
+    function deterministicPosition(
+      event
+    ) {
+
+      /*
+       * Generate stable map positions from the event ID.
+       * This means refresh doesn't move old markers randomly.
+       */
+      let hash = 0;
+
+      const text =
+        event.id ||
+        event.timestamp ||
+        "event";
+
+
+      for (
+        let i = 0;
+        i < text.length;
+        i++
+      ) {
+
+        hash =
+          ((hash << 5) -
+            hash +
+            text.charCodeAt(i)) |
+          0;
+      }
+
+
+      const normalized =
+        Math.abs(hash) / 2147483647;
+
+
+      const normalized2 =
+        Math.abs(
+          Math.sin(hash)
+        );
+
+
+      return {
+        x:
+          0.14 +
+          (normalized * 0.72),
+
+        y:
+          0.18 +
+          (normalized2 * 0.65)
+      };
+    }
+
+
+    function addMapMarker(event) {
+
+      /*
+       * Don't duplicate markers after refresh.
+       */
+      if (
+        state.mapMarkers.some(
+          marker =>
+            marker.id === event.id
+        )
+      ) {
+        return;
+      }
+
+
+      const position =
+        deterministicPosition(event);
+
+
+      state.mapMarkers.push({
+        id: event.id,
+
+        x: position.x,
+
+        y: position.y,
+
+        color:
+          markerColors[event.command] ||
+          "#8795a3",
+
+        label:
+          event.command
+      });
+
+
+      drawMap();
+    }
+
+
+    /*
+     * Restore map markers from persistent events.
+     */
+    for (
+      const event of state.events
+    ) {
+
+      addMapMarker(event);
+    }
+
+
+    window.addEventListener(
+      "resize",
+      resizeMapCanvas
+    );
+
+
+    /*
+     * Delay until layout has calculated dimensions.
+     */
+    requestAnimationFrame(
+      resizeMapCanvas
+    );
+
+
+    /* ============================================================
+       25. VISUAL TRANSMISSION TIMER
+       ============================================================ */
+
+    setInterval(() => {
+
+      if (!state.transmitting) {
+        return;
+      }
+
+      /*
+       * This is UI-only telemetry.
+       */
+      const current =
+        performance.now();
+
+      txTimer.textContent =
+        `${(
+          (current % 1500) /
+          1000
+        ).toFixed(1)}s`;
+
+    }, 50);
+
+
+    /* ============================================================
+       26. OFFLINE GUARANTEE
+       ============================================================ */
+
+    /*
+     * AcousticMesh intentionally performs no fetch(),
+     * XMLHttpRequest, WebSocket, EventSource, external
+     * script loading, external CSS loading, or API calls.
+     *
+     * The application can therefore continue operating
+     * without Internet connectivity once loaded.
+     */
+
+    console.info(
+      "AcousticMesh initialized in offline-first mode."
+    );
+
+  </script>
+</body>
+</html>
