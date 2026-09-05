@@ -1,1 +1,1 @@
-Temporary trigger for the ACK MVP patch. This file can be deleted after the patch succeeds.
+Temporary trigger for the ACK MVP patch. Triggered again after validation fix.
